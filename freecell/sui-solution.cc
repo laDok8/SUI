@@ -6,8 +6,8 @@
 #include <stack>
 #include <algorithm>
 
-std::vector<SearchAction> reconstructPath(const std::map<std::shared_ptr<SearchState>, std::pair<std::shared_ptr<SearchState>, SearchAction>> parent,
-                                          const std::shared_ptr<SearchState> current)
+std::vector<SearchAction> reconstructPath(const std::map<std::shared_ptr<SearchState>, std::pair<std::shared_ptr<SearchState>, SearchAction>>& parent,
+                                          const std::shared_ptr<SearchState>& current)
 {
     std::vector<SearchAction> solution;
     std::shared_ptr<SearchState> state = current;
@@ -23,7 +23,7 @@ std::vector<SearchAction> reconstructPath(const std::map<std::shared_ptr<SearchS
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state)
 {
     std::queue<std::shared_ptr<SearchState>> open;
-    std::set<std::shared_ptr<SearchState>> closed;
+    std::set<SearchState> closed;
     std::map<std::shared_ptr<SearchState>, std::pair<std::shared_ptr<SearchState>, SearchAction>> parent;
 
     if (init_state.isFinal())
@@ -35,19 +35,23 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
     {
         auto current = open.front();
         open.pop();
+        if (closed.find(*current) != closed.end())
+            continue;
+        closed.insert(*current);
 
         for (auto &a : current->actions())
         {
             auto next = std::make_shared<SearchState>(a.execute(*current));
-            if (closed.find(next) == closed.end())
-            {
-                open.push(next);
-                parent.insert({next, {current, a}});
-                if (next->isFinal())
-                    return reconstructPath(parent, next);
+            if (closed.find(*next) != closed.end())
+                continue;
+
+            open.push(next);
+            parent.insert({next, {current, a}});
+            if (next->isFinal()) {
+                //std::cerr << "current: " << getCurrentRSS() << " peak: " << getPeakRSS() << std::endl;
+                return reconstructPath(parent, next);
             }
         }
-        closed.insert(current);
     }
 }
 
