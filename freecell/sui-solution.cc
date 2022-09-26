@@ -1,83 +1,67 @@
-#include <set>
-#include <queue>
-#include <stack>
-
 #include "search-strategies.h"
 #include "memusage.h"
 
-std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state)
+#include <set>
+#include <queue>
+#include <stack>
+#include <algorithm>
+
+std::vector<SearchAction> reconstructPath(const std::map<std::shared_ptr<SearchState>, std::pair<std::shared_ptr<SearchState>, SearchAction>> parent,
+                                          const std::shared_ptr<SearchState> current)
 {
-    std::queue<std::pair<SearchState, std::shared_ptr<std::vector<SearchAction>>>> open;
-    std::set<SearchState> closed;
-
-    open.push({init_state, std::make_shared<std::vector<SearchAction>>()});
-    while (!open.empty())
+    std::vector<SearchAction> solution;
+    std::shared_ptr<SearchState> state = current;
+    while (parent.find(state) != parent.end())
     {
-        auto node = open.front();
-        open.pop();
-
-        if (node.first.isFinal())
-            return *node.second;
-
-        if (closed.find(node.first) != closed.end())
-            continue;
-
-        closed.insert(node.first);
-
-        auto actions = node.first.actions();
-        for (auto action : actions)
-        {
-            auto nextState = action.execute(node.first);
-            auto newPath = std::make_shared<std::vector<SearchAction>>(*node.second);
-            newPath->push_back(action);
-            open.push({nextState, newPath});
-        }
+        solution.push_back(parent.at(state).second);
+        state = parent.at(state).first;
     }
-
-    return {};
+    std::reverse(solution.begin(), solution.end());
+    return solution;
 }
 
+std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state)
+{
+    std::queue<std::shared_ptr<SearchState>> open;
+    std::set<std::shared_ptr<SearchState>> closed;
+    std::map<std::shared_ptr<SearchState>, std::pair<std::shared_ptr<SearchState>, SearchAction>> parent;
+
+    if (init_state.isFinal())
+        return {};
+
+    open.push(std::make_shared<SearchState>(init_state));
+
+    while (!open.empty())
+    {
+        auto current = open.front();
+        open.pop();
+
+        for (auto &a : current->actions())
+        {
+            auto next = std::make_shared<SearchState>(a.execute(*current));
+            if (closed.find(next) == closed.end())
+            {
+                open.push(next);
+                parent.insert({next, {current, a}});
+                if (next->isFinal())
+                    return reconstructPath(parent, next);
+            }
+        }
+        closed.insert(current);
+    }
+}
 
 std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 {
-    std::stack<std::pair<SearchState, std::shared_ptr<std::vector<SearchAction>>>> open;
-    std::set<SearchState> closed;
-
-    open.push({init_state, std::make_shared<std::vector<SearchAction>>()});
-    while (!open.empty())
-    {
-        auto node = open.top();
-        open.pop();
-
-        if (node.second->size() > depth_limit_)
-            continue;
-
-        if (node.first.isFinal())
-            return *node.second;
-
-        if (closed.find(node.first) != closed.end())
-            continue;
-
-        closed.insert(node.first);
-
-        auto actions = node.first.actions();
-        for (auto action : actions)
-        {
-            auto nextState = action.execute(node.first);
-            auto newPath = std::make_shared<std::vector<SearchAction>>(*node.second);
-            newPath->push_back(action);
-            open.push({nextState, newPath});
-        }
-    }
-
     return {};
 }
 
-double StudentHeuristic::distanceLowerBound(const GameState &state) const{
+double StudentHeuristic::distanceLowerBound(const GameState &state) const
+{
     return 0;
 }
 
 std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state)
-{   
+{
     return {};
 }
