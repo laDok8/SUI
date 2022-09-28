@@ -5,6 +5,7 @@
 #include <queue>
 #include <stack>
 #include <algorithm>
+#include <chrono>
 
 #define SEARCH_STATE_SIZE sizeof(SearchState)
 #define SEARCH_ACTION_SIZE sizeof(SearchAction)
@@ -77,62 +78,23 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 {
 }
 
-// Heineman’s Staged Deepening Heusirtic (HSDH). This is
-// the heuristic used by the HSD algorithm: For each foundation pile (recall that foundation piles are constructed in
-// ascending order), locate within the cascade piles the next
-// card that should be placed there, and count the cards found
-// on top of it. The returned value is the sum of this count for
-// all foundations. This number is multiplied by 2 if there are
-// no free FreeCells or empty foundation piles (reflecting the
-// fact that freeing the next card is harder in this case).
 double StudentHeuristic::distanceLowerBound(const GameState &state) const
 {
-    double h = 0;
-    for (int i = 0; i < 4; i++)
+    auto homes = 0;
+    auto moves = 0;
+    for (const auto &home : state.homes)
     {
-        int next_card = state.homes[i].topCard().has_value() ? state.homes[i].topCard().value().value + 1 : 1;
-        for (int j = 0; j < 8; j++)
-        {
-            if (!state.stacks[j].topCard().has_value())
-                continue;
-
-            auto storage = state.stacks[j].storage();
-            auto stack_size = storage.size();
-            for (int k = 0; k < stack_size; k++)
-            {
-                if (storage[k].value == next_card)
-                {
-                    h += stack_size - k - 1;
-                    break;
-                }
-            }
-        }
-    }
-    auto free_cells_size = 0;
-    for (int i = 0; i < 4; i++)
-    {
-        if (!state.free_cells[i].topCard().has_value())
-            free_cells_size++;
-    }
-    auto home_size = 0;
-    for (int i = 0; i < 4; i++)
-    {
-        if (!state.homes[i].topCard().has_value())
-            home_size++;
+        auto opt_top = home.topCard();
+        if (opt_top.has_value())
+            homes += opt_top->value;
     }
 
-    if (free_cells_size != 0 && home_size != 0)
-        h *= 2;
+    for (const auto &stack : state.stacks)
+    {
+        moves += std::pow(stack.nbCards(), 2);
+    }
 
-    // std::cout << "Homes" << std::endl;
-    // for (int i = 0; i < 4; i++)
-    // {
-    //     auto print = state.homes[i].topCard().has_value() ? state.homes[i].topCard().value().value : 0;
-    //     std::cout << print << " ";
-    // }
-    // std::cout << " " << h << std::endl;
-
-    return h;
+    return 52 - homes + moves;
 }
 
 struct Node
@@ -155,8 +117,12 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state)
     open.push({0, init});
     nodes.insert({init, {init, 0}});
 
+    auto t0 = std::chrono::steady_clock::now();
     while (!open.empty())
     {
+        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count() > 15)
+            return {};
+
         auto current = open.top().second;
         open.pop();
 
@@ -177,7 +143,6 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state)
                 nodes.insert({next, {current, cost}});
                 actions.insert({next, a});
                 open.push({cost + compute_heuristic(*next, *heuristic_), next});
-
                 if (next->isFinal())
                 {
                     std::vector<SearchAction> solution;
