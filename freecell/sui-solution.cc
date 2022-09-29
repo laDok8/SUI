@@ -5,68 +5,61 @@
 #include <queue>
 #include <stack>
 #include <algorithm>
-#include <chrono>
+// #include <chrono>
 
-#define SEARCH_STATE_SIZE sizeof(SearchState)
-#define SEARCH_ACTION_SIZE sizeof(SearchAction)
-#define SEARCH_STATE_PTR_SIZE sizeof(SearchState) + sizeof(std::shared_ptr<SearchState>)
-#define NODE_SIZE sizeof(std::pair<std::shared_ptr<SearchState>, SearchAction>)
+#define MEMORY_MAX 0.95
+#define MEGABYTE 1000000
 
 #define CHECK_MEMORY_LIMIT(mem_limit_, alloc_size)  \
     if (getCurrentRSS() + alloc_size >= mem_limit_) \
         return {};
 
-std::vector<SearchAction> reconstructPath(const std::map<std::shared_ptr<SearchState>, std::pair<std::shared_ptr<SearchState>, SearchAction>> &nodes,
-                                          const std::shared_ptr<SearchState> &current, const size_t mem_limit_)
+struct ParentNode
 {
-
-    std::vector<SearchAction> solution;
-    std::shared_ptr<SearchState> state = current;
-    while (nodes.find(state) != nodes.end())
-    {
-        solution.push_back(nodes.at(state).second);
-        state = nodes.at(state).first;
-    }
-    std::reverse(solution.begin(), solution.end());
-    return solution;
-}
+    std::shared_ptr<SearchState> state;
+    SearchAction action;
+};
 
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state)
 {
-
+    double memory_limit = mem_limit_ * MEMORY_MAX;
     std::queue<std::shared_ptr<SearchState>> open;
     std::set<SearchState> closed;
-    std::map<std::shared_ptr<SearchState>, std::pair<std::shared_ptr<SearchState>, SearchAction>> nodes;
+    std::map<std::shared_ptr<SearchState>, ParentNode> nodes;
 
     if (init_state.isFinal())
         return {};
 
     open.push(std::make_shared<SearchState>(init_state));
-
     while (!open.empty())
     {
-        auto current = open.front();
+        CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+        std::shared_ptr<SearchState> current = open.front();
         open.pop();
 
         if (closed.find(*current) != closed.end())
             continue;
 
         closed.insert(*current);
-
-        for (auto &a : current->actions())
+        for (SearchAction &a : current->actions())
         {
-            CHECK_MEMORY_LIMIT(mem_limit_, SEARCH_STATE_PTR_SIZE);
-            auto next = std::make_shared<SearchState>(a.execute(*current));
+            CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+            std::shared_ptr<SearchState> next = std::make_shared<SearchState>(a.execute(*current));
             if (closed.find(*next) != closed.end())
                 continue;
 
-            CHECK_MEMORY_LIMIT(mem_limit_, SEARCH_STATE_PTR_SIZE);
             open.push(next);
-            CHECK_MEMORY_LIMIT(mem_limit_, NODE_SIZE);
             nodes.insert({next, {current, a}});
             if (next->isFinal())
             {
-                return reconstructPath(nodes, next, mem_limit_);
+                std::vector<SearchAction> solution;
+                while (nodes.find(next) != nodes.end())
+                {
+                    solution.push_back(nodes.at(next).action);
+                    next = nodes.at(next).state;
+                }
+                std::reverse(solution.begin(), solution.end());
+                return solution;
             }
         }
     }
@@ -76,12 +69,59 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 
 std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 {
+    double memory_limit = mem_limit_ * MEMORY_MAX;
+    std::stack<std::pair<int, std::shared_ptr<SearchState>>> open;
+    std::set<SearchState> closed;
+    std::map<std::shared_ptr<SearchState>, ParentNode> nodes;
+
+    if (init_state.isFinal())
+        return {};
+
+    open.push({0, std::make_shared<SearchState>(init_state)});
+    while (!open.empty())
+    {
+        CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+        std::shared_ptr<SearchState> current = open.top().second;
+        int depth = open.top().first;
+        open.pop();
+
+        if (depth >= depth_limit_)
+            continue;
+
+        if (closed.find(*current) != closed.end())
+            continue;
+
+        closed.insert(*current);
+        for (SearchAction &a : current->actions())
+        {
+            CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+            std::shared_ptr<SearchState> next = std::make_shared<SearchState>(a.execute(*current));
+            if (closed.find(*next) != closed.end())
+                continue;
+
+            open.push({depth + 1, next});
+            nodes.insert({next, {current, a}});
+            if (next->isFinal())
+            {
+                std::vector<SearchAction> solution;
+                while (nodes.find(next) != nodes.end())
+                {
+                    solution.push_back(nodes.at(next).action);
+                    next = nodes.at(next).state;
+                }
+                std::reverse(solution.begin(), solution.end());
+                return solution;
+            }
+        }
+    }
+
+    return {};
 }
 
 double StudentHeuristic::distanceLowerBound(const GameState &state) const
 {
-    auto homes = 0;
-    auto moves = 0;
+    int homes = 0;
+    int moves = 0;
     for (const auto &home : state.homes)
     {
         auto opt_top = home.topCard();
@@ -99,56 +139,62 @@ double StudentHeuristic::distanceLowerBound(const GameState &state) const
 
 struct Node
 {
-    std::shared_ptr<SearchState> state;
     double cost;
+    double cost_from_start;
+    std::shared_ptr<SearchState> state;
+
+    bool operator<(const Node &other) const
+    {
+        return cost > other.cost;
+    }
 };
 
 std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state)
 {
-    std::priority_queue<std::pair<double, std::shared_ptr<SearchState>>, std::vector<std::pair<double, std::shared_ptr<SearchState>>>, std::greater<std::pair<double, std::shared_ptr<SearchState>>>> open;
+    double memory_limit = mem_limit_ * MEMORY_MAX;
+    std::priority_queue<Node> open;
     std::set<SearchState> closed;
-    std::map<std::shared_ptr<SearchState>, Node> nodes;
-    std::map<std::shared_ptr<SearchState>, SearchAction> actions;
+    std::map<std::shared_ptr<SearchState>, ParentNode> nodes;
 
     if (init_state.isFinal())
         return {};
 
-    auto init = std::make_shared<SearchState>(init_state);
-    open.push({0, init});
-    nodes.insert({init, {init, 0}});
+    std::shared_ptr<SearchState> init = std::make_shared<SearchState>(init_state);
+    open.push({0, 0, init});
 
-    auto t0 = std::chrono::steady_clock::now();
+    // auto t0 = std::chrono::steady_clock::now();
     while (!open.empty())
     {
-        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count() > 15)
-            return {};
+        CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+        // if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count() > 15)
+        //     return {};
 
-        auto current = open.top().second;
+        std::shared_ptr<SearchState> current = open.top().state;
+        double cost_from_start = open.top().cost_from_start;
         open.pop();
 
         if (closed.find(*current) != closed.end())
             continue;
 
         closed.insert(*current);
-
-        for (auto &a : current->actions())
+        for (SearchAction &a : current->actions())
         {
-            auto next = std::make_shared<SearchState>(a.execute(*current));
+            CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+            std::shared_ptr<SearchState> next = std::make_shared<SearchState>(a.execute(*current));
             if (closed.find(*next) != closed.end())
                 continue;
 
-            double cost = nodes.at(current).cost + 1;
+            auto next_cost = cost_from_start + 1;
             if (nodes.find(next) == nodes.end())
             {
-                nodes.insert({next, {current, cost}});
-                actions.insert({next, a});
-                open.push({cost + compute_heuristic(*next, *heuristic_), next});
+                nodes.insert({next, {current, a}});
+                open.push({next_cost + compute_heuristic(*next, *heuristic_), next_cost, next});
                 if (next->isFinal())
                 {
                     std::vector<SearchAction> solution;
-                    while (actions.find(next) != actions.end())
+                    while (nodes.find(next) != nodes.end())
                     {
-                        solution.push_back(actions.at(next));
+                        solution.push_back(nodes.at(next).action);
                         next = nodes.at(next).state;
                     }
                     std::reverse(solution.begin(), solution.end());
