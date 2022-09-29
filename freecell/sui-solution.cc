@@ -5,20 +5,28 @@
 #include <queue>
 #include <stack>
 #include <algorithm>
-// #include <chrono>
 
 #define MEMORY_MAX 0.95
-#define MEGABYTE 1000000
-
-#define CHECK_MEMORY_LIMIT(mem_limit_, alloc_size)  \
-    if (getCurrentRSS() + alloc_size >= mem_limit_) \
-        return {};
+#define CHECK_MEMORY_LIMIT(mem_limit_)  \
+    if (getCurrentRSS() >= mem_limit_) \
+        return {}
 
 struct ParentNode
 {
     std::shared_ptr<SearchState> state;
     SearchAction action;
 };
+
+std::vector<SearchAction> reconstructPath(const std::map<std::shared_ptr<SearchState>, ParentNode> &nodes, std::shared_ptr<SearchState> &current){
+    std::vector<SearchAction> solution;
+    while (nodes.find(current) != nodes.end())
+    {
+        solution.push_back(nodes.at(current).action);
+        current = nodes.at(current).state;
+    }
+    std::reverse(solution.begin(), solution.end());
+    return solution;
+}
 
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state)
 {
@@ -33,7 +41,6 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
     open.push(std::make_shared<SearchState>(init_state));
     while (!open.empty())
     {
-        CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
         std::shared_ptr<SearchState> current = open.front();
         open.pop();
 
@@ -43,7 +50,7 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
         closed.insert(*current);
         for (SearchAction &a : current->actions())
         {
-            CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+            CHECK_MEMORY_LIMIT(memory_limit);
             std::shared_ptr<SearchState> next = std::make_shared<SearchState>(a.execute(*current));
             if (closed.find(*next) != closed.end())
                 continue;
@@ -51,19 +58,9 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
             open.push(next);
             nodes.insert({next, {current, a}});
             if (next->isFinal())
-            {
-                std::vector<SearchAction> solution;
-                while (nodes.find(next) != nodes.end())
-                {
-                    solution.push_back(nodes.at(next).action);
-                    next = nodes.at(next).state;
-                }
-                std::reverse(solution.begin(), solution.end());
-                return solution;
-            }
+                return reconstructPath(nodes, next);
         }
     }
-
     return {};
 }
 
@@ -80,21 +77,17 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
     open.push({0, std::make_shared<SearchState>(init_state)});
     while (!open.empty())
     {
-        CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
         std::shared_ptr<SearchState> current = open.top().second;
         int depth = open.top().first;
         open.pop();
 
-        if (depth >= depth_limit_)
-            continue;
-
-        if (closed.find(*current) != closed.end())
+        if (depth >= depth_limit_ || closed.find(*current) != closed.end())
             continue;
 
         closed.insert(*current);
         for (SearchAction &a : current->actions())
         {
-            CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+            CHECK_MEMORY_LIMIT(memory_limit);
             std::shared_ptr<SearchState> next = std::make_shared<SearchState>(a.execute(*current));
             if (closed.find(*next) != closed.end())
                 continue;
@@ -102,19 +95,9 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
             open.push({depth + 1, next});
             nodes.insert({next, {current, a}});
             if (next->isFinal())
-            {
-                std::vector<SearchAction> solution;
-                while (nodes.find(next) != nodes.end())
-                {
-                    solution.push_back(nodes.at(next).action);
-                    next = nodes.at(next).state;
-                }
-                std::reverse(solution.begin(), solution.end());
-                return solution;
-            }
+                return reconstructPath(nodes, next);
         }
     }
-
     return {};
 }
 
@@ -133,7 +116,6 @@ double StudentHeuristic::distanceLowerBound(const GameState &state) const
     {
         moves += std::pow(stack.nbCards(), 2);
     }
-
     return 52 - homes + moves;
 }
 
@@ -162,13 +144,8 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state)
     std::shared_ptr<SearchState> init = std::make_shared<SearchState>(init_state);
     open.push({0, 0, init});
 
-    // auto t0 = std::chrono::steady_clock::now();
     while (!open.empty())
     {
-        CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
-        // if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count() > 15)
-        //     return {};
-
         std::shared_ptr<SearchState> current = open.top().state;
         double cost_from_start = open.top().cost_from_start;
         open.pop();
@@ -179,30 +156,18 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state)
         closed.insert(*current);
         for (SearchAction &a : current->actions())
         {
-            CHECK_MEMORY_LIMIT(memory_limit, MEGABYTE);
+            CHECK_MEMORY_LIMIT(memory_limit);
             std::shared_ptr<SearchState> next = std::make_shared<SearchState>(a.execute(*current));
             if (closed.find(*next) != closed.end())
                 continue;
 
             auto next_cost = cost_from_start + 1;
-            if (nodes.find(next) == nodes.end())
-            {
-                nodes.insert({next, {current, a}});
-                open.push({next_cost + compute_heuristic(*next, *heuristic_), next_cost, next});
-                if (next->isFinal())
-                {
-                    std::vector<SearchAction> solution;
-                    while (nodes.find(next) != nodes.end())
-                    {
-                        solution.push_back(nodes.at(next).action);
-                        next = nodes.at(next).state;
-                    }
-                    std::reverse(solution.begin(), solution.end());
-                    return solution;
-                }
-            }
+
+            nodes.insert({next, {current, a}});
+            open.push({next_cost + compute_heuristic(*next, *heuristic_), next_cost, next});
+            if (next->isFinal())
+                return reconstructPath(nodes, next);
         }
     }
-
     return {};
 }
