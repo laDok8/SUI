@@ -1,0 +1,58 @@
+* Kdyz kreslite histogram spojitych priznaku, nemel by
+vypadat jako oddelene bary, ale pokryvat prislusne intervaly
+na ose x.
+
+* Kdyz v konstruktoru binarniho generativniho klasifikatoru
+vystavite oba priory, meli byste kontrolovat, ze sumuji do
+jednicky.
+
+* Nedelejte `from scipy.stats import norm`, driv nebo
+pozdeji napisete svoji `norm()`, ktera bude nejspis neco
+normalizovat, a paradne se strelite do nohy.
+
+* Datasetu je lepsi davat cele cesty, ne jenom `.val`, ze
+ktereho on si ma sam udelat `positives.val` apod., zbytecne
+to cini Vas kod rigidnim. Totez plati obecne pro ruzne
+funkce prijimajici trenovaci a validacni dataset atp.
+Vyjimkou jsou samozrejme situace, kdy pracujete s hodne
+standardnim formatem dat -- i tehdy ale zvazte oddeleni
+vlastni prace od vyporadani se se standardem.
+
+* Trida by se mela jmenovat jmenne, nikoliv slovesne, tedy
+`Dataset` ano, `LoadData` ne. Mela by odpovidat na otazku
+"Co je to `train_dataset`?"
+
+* Zdaleka nejkreativnejsi jste jako populace byli ve funkci
+`evaluate()`. Zaokrouhlovani, odecitani se zaokrouhlovanim,
+mnohonasobna volani `np.where`, dokonce ruzne numpyovske
+xory a vselicos. Drzte se toho, ze numpyovska pole lze
+porovnavat mezi sebou i se skalary.
+
+* Mnohym z Vas se PDFko vyrendrovalo v nepeknem tucnem
+fontu. To by jeste dalo prezit, jenze kdyz ten font nema
+typy pro ceska pismena a substituuji se tam nejakeho jineho,
+tak uz je to opravdu skarede.
+
+* Kdyz vracite dve hodnoty, ktere nejsou jen dve z
+nekolika, maji svuj jasne dany vyznam, vracejte n-tici,
+nikoliv seznam. Tzn. `return mean, std` ano, `return [mean,
+std]` ne.
+
+------------------------------------------------------
+
+* Ve vyrazu `x[from:to]` muze by byt `to` vetsi nez rozmer
+pole, hodne by Vam to zjednodusilo `batch_provider`a. Plati
+to jak pro numpy a torch, tak pro obycejne pythonovske
+seznamy.
+
+
+* Druha rozhodovaci hranice (ta u 1.25) neni "symetricka
+kvuli tvaru gaussovky". Je tam proto, ze modely trid maji
+ruzny rozptyl. Pozitivni priklady maji ostrejsi rozlozeni a
+to proste spadne pod negativni. Obecne tvar posterioru neni
+gaussova krivka, mozna s vyjimkou nejakych specialnich
+pripadu. Napr. kdybyste zafixovali rozptyl gaussovek pro
+pozitivni i negativni priklady na stejnou hodnotu, dostali
+byste logistickou sigmoidu, podobne jako u linearni
+logisticke regrese. (Vice v SUR.)
+    
